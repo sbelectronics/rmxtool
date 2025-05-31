@@ -386,143 +386,14 @@ func Wipe(cmd *cobra.Command, args []string) {
 
 func CheckDisk(cmd *cobra.Command, args []string) {
 	checkErrors = 0
-	CheckDisk1()
+	c := &Checker{}
+	c.CheckDisk1()
 	if checkErrors > 0 {
 		fmt.Printf("Disk check completed with %d errors.\n", checkErrors)
 		os.Exit(1)
 	} else {
 		if !quiet {
 			fmt.Println("Disk check completed successfully, no errors found.")
-		}
-	}
-}
-
-func CheckDisk1() {
-	r := rmximage.NewRMXImage()
-	err := r.Load(imageFileName, byteSwap)
-	FatalErrCheck(err)
-
-	alloc := map[int][]*rmximage.FNode{}
-	allocFNodes := map[int]*rmximage.FNode{}
-	dir, err := r.GetRootDirectory()
-	if err != nil {
-		fmt.Printf("Error getting FNode 6: %v\n", err)
-		checkErrors += 1
-		return
-	}
-	fmt.Printf("Checking root directory\n")
-	MarkBlocks(dir, alloc, allocFNodes)
-	CheckDir(r, dir, alloc, allocFNodes)
-
-	volMap, err := r.GetVolMap()
-	if err != nil {
-		fmt.Printf("Error getting volume map: %v\n", err)
-		checkErrors += 1
-		return
-	}
-
-	fmt.Printf("Reconciling free lists\n")
-	for blocknum, fnodes := range alloc {
-		if len(fnodes) > 1 {
-			fmt.Printf("Block %d is allocated by multiple FNodes:\n", blocknum)
-			checkErrors += 1
-		}
-		if !volMap.IsAlloc(blocknum) {
-			fmt.Printf("  Block %d is marked as free, but allocated by FNodes:\n", blocknum)
-			checkErrors += 1
-		}
-	}
-
-	for i := 0; i < int(volMap.GetNumBits()); i++ {
-		_, isAlloc := alloc[i]
-		if volMap.IsAlloc(i) && !isAlloc {
-			fmt.Printf("  (Warning) Block %d is marked as allocated in VolMap but not in allocation map.\n", i)
-		} else if !volMap.IsAlloc(i) && isAlloc {
-			fmt.Printf("  Block %d is marked as free in VolMap but allocated in allocation map.\n", i)
-			checkErrors += 1
-		}
-	}
-
-	fnodeMap, err := r.GetFNodeMap()
-	if err != nil {
-		fmt.Printf("Error getting FNode map: %v\n", err)
-		checkErrors += 1
-		return
-	}
-
-	for fnodeIndex, _ := range allocFNodes {
-		if !fnodeMap.IsAlloc(fnodeIndex) {
-			fmt.Printf("  FNode %d is allocated but not marked in FNode map.\n", fnodeIndex)
-		}
-	}
-
-	// these are always allocated
-	allocFNodes[0] = &rmximage.FNode{Number: 0}
-	allocFNodes[3] = &rmximage.FNode{Number: 3}
-
-	for i := 0; i < int(fnodeMap.GetNumBits()); i++ {
-		_, isAlloc := allocFNodes[i]
-		if fnodeMap.IsAlloc(i) && !isAlloc {
-			fmt.Printf("  FNode %d is marked as allocated in FNodeMap but not in allocation map.\n", i)
-			checkErrors += 1
-		} else if !fnodeMap.IsAlloc(i) && isAlloc {
-			fmt.Printf("  FNode %d is marked as free in FNodeMap but allocated in allocation map.\n", i)
-			checkErrors += 1
-		}
-	}
-}
-
-func MarkBlocks(fnode *rmximage.FNode, alloc map[int][]*rmximage.FNode, allocFNodes map[int]*rmximage.FNode) {
-	allocFNodes[fnode.Number] = fnode
-	for _, ib := range fnode.AllIndirectBlocks {
-		allocEntry, ok := alloc[ib]
-		if !ok {
-			allocEntry = []*rmximage.FNode{}
-		}
-		allocEntry = append(allocEntry, fnode)
-		alloc[ib] = allocEntry
-	}
-	for _, b := range fnode.AllDataBlocks {
-		allocEntry, ok := alloc[b]
-		if !ok {
-			allocEntry = []*rmximage.FNode{}
-		}
-		allocEntry = append(allocEntry, fnode)
-		alloc[b] = allocEntry
-	}
-}
-
-func CheckDir(r *rmximage.RMXImage, dir *rmximage.FNode, alloc map[int][]*rmximage.FNode, allocFNodes map[int]*rmximage.FNode) {
-	dirList, err := r.GetDirectory(dir)
-	if err != nil {
-		fmt.Printf("Error getting directory: %v\n", err)
-		checkErrors += 1
-		return
-	}
-	for _, entry := range dirList.Entries {
-		if entry.FNode != 0 {
-			fmt.Printf("  Checking file %s (FNode %d)\n", entry.Name, entry.FNode)
-			fnode, err := r.GetFNode(int(entry.FNode))
-			if err != nil {
-				fmt.Printf("  Error getting FNode %d: %v\n", entry.FNode, err)
-				checkErrors += 1
-				continue
-			}
-			if !fnode.IsAllocated() {
-				fmt.Printf("  Error: FNode %d is not allocated.\n", entry.FNode)
-				checkErrors += 1
-			}
-			_, err = r.ReadFile(fnode)
-			if err != nil {
-				fmt.Printf("  Error reading file for FNode %d: %v\n", entry.FNode, err)
-				checkErrors += 1
-				continue
-			}
-			MarkBlocks(fnode, alloc, allocFNodes)
-			if fnode.IsDirectory() {
-				fmt.Printf("Checking directory %s\n", entry.Name)
-				CheckDir(r, fnode, alloc, allocFNodes)
-			}
 		}
 	}
 }
