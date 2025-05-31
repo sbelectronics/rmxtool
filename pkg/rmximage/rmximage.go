@@ -567,24 +567,24 @@ func (d *Directory) PrintLong() {
 }
 
 func (d *Directory) Find(entryName string) (int, error) {
-	for i, _ := range d.Entries {
+	for i := range d.Entries {
 		if strings.EqualFold(d.Entries[i].Name, entryName) && d.Entries[i].FNode != 0 {
 			return int(d.Entries[i].FNode), nil
 		}
 	}
-	return 0, fmt.Errorf("Entry '%s' not found in directory", entryName)
+	return 0, fmt.Errorf("entry '%s' not found in directory", entryName)
 }
 
 func (d *Directory) Unlink(entryName string) error {
 	found := false
-	for i, _ := range d.Entries {
+	for i := range d.Entries {
 		if strings.EqualFold(d.Entries[i].Name, entryName) {
 			d.Entries[i].FNode = 0 // Unlink the entry by setting FNode to 0
 			found = true
 		}
 	}
 	if !found {
-		return fmt.Errorf("Entry '%s' not found in directory", entryName)
+		return fmt.Errorf("entry '%s' not found in directory", entryName)
 	}
 	return nil
 }
@@ -662,7 +662,7 @@ func (v *Bitmap) NextFree() (int, error) {
 			return i, nil
 		}
 	}
-	return 0, fmt.Errorf("No free bits")
+	return 0, fmt.Errorf("no free bits")
 }
 
 func (v *Bitmap) Print() {
@@ -740,7 +740,7 @@ func (r *RMXImage) Load(fileName string, byteSwap bool) error {
 
 func (r *RMXImage) Save() error {
 	if r.fileName == "" {
-		return fmt.Errorf("No file name specified for saving RMXImage")
+		return fmt.Errorf("no file name specified for saving RMXImage")
 	}
 
 	var data []byte
@@ -882,7 +882,7 @@ func (r *RMXImage) ReadFile(fnode *FNode) ([]byte, error) {
 
 func (r *RMXImage) Mknod(dirFNode *FNode, fileName string, ftype int) (*FNode, error) {
 	if !dirFNode.IsDirectory() {
-		return nil, fmt.Errorf("Parent FNode is not a directory")
+		return nil, fmt.Errorf("parent FNode is not a directory")
 	}
 
 	fnode := &FNode{
@@ -997,7 +997,7 @@ func (r *RMXImage) PutFile(dirFNode *FNode, fileName string, data []byte) (*FNod
 	}
 
 	if len(blkList) > 8 {
-		return nil, fmt.Errorf("Too many blocks allocated for FNode: %d. Long files not supported yet.", len(blkList))
+		return nil, fmt.Errorf("too many blocks allocated for FNode: %d. Long files not supported yet", len(blkList))
 	}
 
 	err = volMap.Update()
@@ -1098,9 +1098,7 @@ func (r *RMXImage) GetFNodeMap() (*Bitmap, error) {
 }
 
 func (r *RMXImage) Lookup(dir *FNode, name string) (*FNode, error) {
-	if strings.HasPrefix(name, "/") {
-		name = name[1:]
-	}
+	name = strings.TrimPrefix(name, "/")
 
 	if dir == nil {
 		vl, err := r.GetVolumeLabel()
