@@ -3,6 +3,7 @@ package rmximage
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/sbelectronics/multibus/rmxtool/pkg/imd"
 	"os"
 	"strings"
 )
@@ -35,6 +36,7 @@ type RMXImage struct {
 	contents []byte
 	byteSwap bool
 	fileName string
+	im       *imd.ImageDisk // if the image is loaded from an IMD file, this will be set
 }
 
 type IsoVolumeLabel struct {
@@ -663,9 +665,27 @@ func NewRMXImage() *RMXImage {
 func (r *RMXImage) Load(fileName string, byteSwap bool) error {
 	r.fileName = fileName
 	r.byteSwap = byteSwap
-	data, err := os.ReadFile(fileName)
-	if err != nil {
-		return err
+
+	var data []byte
+	if strings.HasSuffix(fileName, ".imd") || strings.HasSuffix(fileName, ".IMD") {
+		im := imd.NewImageDisk()
+		err := im.Load(fileName)
+		if err != nil {
+			return err
+		}
+		data = im.GetData()
+
+		err = os.WriteFile("imdtest.img", data, 0644)
+		if err != nil {
+			return err
+		}
+		r.im = im
+	} else {
+		var err error
+		data, err = os.ReadFile(fileName)
+		if err != nil {
+			return err
+		}
 	}
 
 	if byteSwap {
@@ -685,17 +705,33 @@ func (r *RMXImage) Save() error {
 		return fmt.Errorf("No file name specified for saving RMXImage")
 	}
 
-	if r.byteSwap {
-		data := r.contents
-		for i := 0; i < len(r.contents); i += 2 {
-			if i+1 < len(r.contents) {
-				r.contents[i], r.contents[i+1] = r.contents[i+1], r.contents[i]
-			}
+	var data []byte
+
+	if strings.HasSuffix(r.fileName, ".imd") || strings.HasSuffix(r.fileName, ".IMD") {
+		var err error
+		r.im.SetData(r.contents)
+		data, err = r.im.GetIMD()
+		if err != nil {
+			return fmt.Errorf("failed to get IMD data: %w", err)
 		}
-		return os.WriteFile(r.fileName, data, 0644)
+	} else {
+		data = r.contents
 	}
 
-	return os.WriteFile(r.fileName, r.contents, 0644)
+	if r.byteSwap {
+		for i := 0; i < len(r.contents); i += 2 {
+			if i+1 < len(r.contents) {
+				data[i], data[i+1] = data[i+1], data[i]
+			}
+		}
+	}
+
+	err := os.Remove(r.fileName)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete existing file: %w", err)
+	}
+
+	return os.WriteFile(r.fileName, data, 0644)
 }
 
 func (r *RMXImage) GetIsoVolumeLabel() (*IsoVolumeLabel, error) {
