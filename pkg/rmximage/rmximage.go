@@ -3,7 +3,7 @@ package rmximage
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/sbelectronics/multibus/rmxtool/pkg/imd"
+	"github.com/sbelectronics/rmxtool/pkg/imd"
 	"os"
 	"strings"
 )

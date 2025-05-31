@@ -1,4 +1,4 @@
-module github.com/sbelectronics/multibus/rmxtool
+module github.com/sbelectronics/rmxtool
 
 go 1.24.3
 

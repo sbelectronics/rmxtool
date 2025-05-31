@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/sbelectronics/multibus/rmxtool/pkg/rmximage"
+	"github.com/sbelectronics/rmxtool/pkg/rmximage"
 	"github.com/spf13/cobra"
 	"os"
 	"path"
