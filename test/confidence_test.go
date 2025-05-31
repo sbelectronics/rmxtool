@@ -267,6 +267,43 @@ func (s *ConfidenceSuite) TestWipeAndFill() {
 	s.CheckDisk()
 }
 
+func (s *ConfidenceSuite) TestDeletePutIMD() {
+	files := make(map[string]string)
+	for k, v := range SRCIMAGE_FILES {
+		files[k] = v
+	}
+
+	out, errOut, err := s.run("delete", "-q", "/system/diskverify", "-f", TESTIMAGE_IMD)
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	files["country.txt"] = "1219be1aa7e85838ad7e5940ca078e1259cedf23"
+	files["/system/lamb.txt"] = "6002f8f827625b854c2764e3baa3611bdc7728ab"
+	files["/user/world/odyssey.txt"] = "230f4a98d3566dec50b3eb0e750df902cc652169"
+	files["/lang/scott.txt"] = "aa630cac89431f84f6d20c12c837311e5e44bfd6"
+
+	files["/system/diskverify"] = ""
+
+	out, errOut, err = s.run("put", "-q", "testdata/country.txt", "-f", TESTIMAGE_IMD)
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("put", "-q", "testdata/lamb.txt", "-f", TESTIMAGE_IMD, "-d", "/system")
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("put", "-q", "testdata/odyssey.txt", "-f", TESTIMAGE_IMD, "-d", "/user/world")
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("put", "-q", "testdata/scott.txt", "-f", TESTIMAGE_IMD, "-d", "/lang")
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	s.VerifyFiles(TESTIMAGE_IMD, files)
+	s.CheckDisk()
+}
+
 func (s *ConfidenceSuite) TestWipeAndFillIMD() {
 	out, errOut, err := s.run("wipe", "-f", TESTIMAGE_IMD)
 	s.NoError(err, "Wipe command failed")
