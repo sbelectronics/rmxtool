@@ -814,11 +814,12 @@ func (r *RMXImage) ReadLongData(fnode *FNode, blockfile []byte, totalBlocks int)
 	data := []byte{}
 	for (len(blockfile) > 0) && (totalBlocks > 0) {
 		nblocks := blockfile[0]
+		blockPointer := uint32(blockfile[1]) + uint32(blockfile[2])<<8 + uint32(blockfile[3])<<16
+		blockfile = blockfile[4:]
+
 		if nblocks == 0 {
 			continue
 		}
-		blockPointer := uint32(blockfile[1]) + uint32(blockfile[2])<<8 + uint32(blockfile[3])<<16
-		blockfile = blockfile[4:]
 
 		fnode.appendAllDataBlocks(int(nblocks), int(blockPointer))
 
