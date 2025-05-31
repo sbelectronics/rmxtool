@@ -193,20 +193,9 @@ func (imd *ImageDisk) GetIMD() ([]byte, error) {
 
 			if track.SectorSizeCode == 0xFF {
 				data = append(data, track.SectorSizeCodes...)
-				/*
-					for _, sizeCode := range track.SectorSizeCodes {
-						data = append(data, sizeCode)
-					}
-				*/
 			}
 
 			data = append(data, track.SectorNumbers...)
-
-			/*
-				for i := 0; i < int(track.SectorCount); i++ {
-					data = append(data, track.SectorNumbers[i])
-				}
-			*/
 
 			for k := 0; k < int(track.SectorCount); k++ {
 				sector := track.Sectors[int(track.SectorNumbers[k])]

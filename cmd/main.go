@@ -332,12 +332,8 @@ func Mkdir(cmd *cobra.Command, args []string) {
 		dirName := path.Dir(arg)
 		baseName := path.Base(arg)
 
-		fmt.Printf("%s %s\n", dirName, baseName)
-
 		dirFNode, err := GetParentDir(r, dirName)
 		FatalErrCheck(err)
-
-		fmt.Printf("%d", dirFNode.Number)
 
 		_, err = r.Mkdir(dirFNode, baseName)
 		FatalErrCheck(err)
