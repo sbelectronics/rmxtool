@@ -397,7 +397,7 @@ func (f *FNode) GetFreePointer() (int, error) {
 			return i, nil
 		}
 	}
-	return 0, fmt.Errorf("No free pointer available in FNode")
+	return 0, fmt.Errorf("no free pointer available in FNode")
 }
 
 func (f *FNode) Expand() error {
@@ -420,7 +420,10 @@ func (f *FNode) Expand() error {
 	}
 
 	volMap.SetAlloc(freeBlock, true)
-	volMap.Update()
+	err = volMap.Update()
+	if err != nil {
+		return err
+	}
 
 	ptr, err := f.GetFreePointer()
 	if err != nil {
@@ -432,7 +435,10 @@ func (f *FNode) Expand() error {
 	f.ThisSize += uint32(vl.Gran)
 	f.TotalBlocks += 1
 	f.AllDataBlocks = append(f.AllDataBlocks, freeBlock)
-	f.Update()
+	err = f.Update()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -468,10 +474,7 @@ type Directory struct {
 func (d *Directory) Deserialize(data []byte, length int) {
 	d.Entries = []DirEntry{}
 	offset := 0
-	for {
-		if length < 16 {
-			break
-		}
+	for length >= 16 {
 		entry := DirEntry{}
 		entry.FNode = binary.LittleEndian.Uint16(data[offset+0 : offset+2])
 		entry.Name = getStr(data[offset+2 : offset+16])
@@ -611,7 +614,10 @@ func (d *Directory) AddEntry(fnodeIndex int, name string) (*DirEntry, error) {
 	entry := &DirEntry{FNode: uint16(fnodeIndex), Name: name}
 	d.Entries = append(d.Entries, *entry)
 	d.fnode.TotalSize += 16
-	d.fnode.Update()
+	err := d.fnode.Update()
+	if err != nil {
+		return nil, err
+	}
 
 	return entry, nil
 }
@@ -888,8 +894,14 @@ func (r *RMXImage) Mknod(dirFNode *FNode, fileName string, ftype int) (*FNode, e
 		Owner: uint16(dirFNode.Number),
 	}
 
-	fnode.AddAccessor(AccessAll, 0)     // Root
-	fnode.AddAccessor(AccessAll, 65535) // World
+	err := fnode.AddAccessor(AccessAll, 0) // Root
+	if err != nil {
+		return nil, err
+	}
+	err = fnode.AddAccessor(AccessAll, 65535) // World
+	if err != nil {
+		return nil, err
+	}
 
 	fnodeMap, err := r.GetFNodeMap()
 	if err != nil {
@@ -996,7 +1008,10 @@ func (r *RMXImage) PutFile(dirFNode *FNode, fileName string, data []byte) (*FNod
 	numBlocks := (len(data) + int(vl.Gran) - 1) / int(vl.Gran)
 	fnode.TotalBlocks = uint32(numBlocks)
 	copy(fnode.Pointers[:], blkList)
-	fnode.Update()
+	err = fnode.Update()
+	if err != nil {
+		return nil, err
+	}
 
 	return fnode, nil
 }
@@ -1133,8 +1148,6 @@ func (r *RMXImage) Lookup(dir *FNode, name string) (*FNode, error) {
 		}
 		return fnode, nil
 	}
-
-	return nil, fmt.Errorf("file %s not found", name)
 }
 
 func (r *RMXImage) DeleteFNode(fnode *FNode) error {
@@ -1174,7 +1187,10 @@ func (r *RMXImage) DeleteFNode(fnode *FNode) error {
 		return err
 	}
 
-	fnode.Directory.Update()
+	err = fnode.Directory.Update()
+	if err != nil {
+		return err
+	}
 
 	err = volMap.Update()
 	if err != nil {

@@ -73,7 +73,7 @@ func (c *Checker) CheckDisk1() {
 		return
 	}
 
-	for fnodeIndex, _ := range c.AllocFNodes {
+	for fnodeIndex := range c.AllocFNodes {
 		if !fnodeMap.IsAlloc(fnodeIndex) {
 			fmt.Printf("  FNode %d is allocated but not marked in FNode map.\n", fnodeIndex)
 			checkErrors += 1

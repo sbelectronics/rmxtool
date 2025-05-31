@@ -73,7 +73,12 @@ func (imd *ImageDisk) Load(fileName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open image file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf("Warning: failed to close image file: %v", err)
+		}
+	}()
 
 	data, err := os.ReadFile(imd.FileName)
 	if err != nil {
@@ -187,14 +192,21 @@ func (imd *ImageDisk) GetIMD() ([]byte, error) {
 			data = append(data, track.SectorSizeCode)
 
 			if track.SectorSizeCode == 0xFF {
-				for _, sizeCode := range track.SectorSizeCodes {
-					data = append(data, sizeCode)
-				}
+				data = append(data, track.SectorSizeCodes...)
+				/*
+					for _, sizeCode := range track.SectorSizeCodes {
+						data = append(data, sizeCode)
+					}
+				*/
 			}
 
-			for i := 0; i < int(track.SectorCount); i++ {
-				data = append(data, track.SectorNumbers[i])
-			}
+			data = append(data, track.SectorNumbers...)
+
+			/*
+				for i := 0; i < int(track.SectorCount); i++ {
+					data = append(data, track.SectorNumbers[i])
+				}
+			*/
 
 			for k := 0; k < int(track.SectorCount); k++ {
 				sector := track.Sectors[int(track.SectorNumbers[k])]

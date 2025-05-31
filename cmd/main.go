@@ -226,7 +226,10 @@ func Get(cmd *cobra.Command, args []string) {
 		} else {
 			f, err = os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 			FatalErrCheck(err)
-			defer f.Close()
+			defer func() {
+				err := f.Close()
+				FatalErrCheck(err)
+			}()
 		}
 
 		n, err := f.Write(data)
@@ -251,7 +254,7 @@ func GetParentDir(r *rmximage.RMXImage, dirName string) (*rmximage.FNode, error)
 		}
 
 		if !dirFNode.IsDirectory() {
-			return nil, fmt.Errorf("Specified directory %s is not a directory.\n", dirName)
+			return nil, fmt.Errorf("specified directory %s is not a directory", dirName)
 		}
 		return dirFNode, nil
 	} else {
@@ -367,7 +370,10 @@ func WipeFNode(fnode *rmximage.FNode) error {
 		}
 	}
 	if fnode.Number > 6 {
-		fnode.Image.DeleteFNode(fnode)
+		err := fnode.Image.DeleteFNode(fnode)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

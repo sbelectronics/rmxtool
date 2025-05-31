@@ -70,7 +70,10 @@ func (s *ConfidenceSuite) run(args ...string) (string, string, error) {
 func (s *ConfidenceSuite) VerifyFiles(files map[string]string) {
 	tempDir, err := os.MkdirTemp("", "confidence-test")
 	s.Require().NoError(err)
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		s.NoError(err, "Failed to clean up temporary directory")
+	}()
 
 	for fileName, expectedHash := range files {
 		baseName := path.Base(fileName)
