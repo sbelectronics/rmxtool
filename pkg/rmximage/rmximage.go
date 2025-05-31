@@ -326,6 +326,18 @@ func (f *FNode) IsLong() bool {
 	return f.Flags&LongFile != 0
 }
 
+func (f *FNode) IsPrimary() bool {
+	return f.Flags&Primary != 0
+}
+
+func (f *FNode) IsUnmodified() bool {
+	return f.Flags&Unmodified != 0
+}
+
+func (f *FNode) IsNoDelete() bool {
+	return f.Flags&NoDelete != 0
+}
+
 func (f *FNode) IsDirectory() bool {
 	return f.FType == TypeDirectory
 }
@@ -513,10 +525,30 @@ func (d *Directory) PrintLong() {
 				fmt.Printf("  %-12s", "Unknown")
 			}
 
-			if fnode.IsLong() {
-				fmt.Printf(" LONG")
+			if fnode.IsAllocated() {
+				fmt.Print("A")
 			} else {
-				fmt.Printf("     ")
+				fmt.Print(" ")
+			}
+			if fnode.IsLong() {
+				fmt.Print("L")
+			} else {
+				fmt.Print(" ")
+			}
+			if fnode.IsPrimary() {
+				fmt.Print("P")
+			} else {
+				fmt.Print(" ")
+			}
+			if fnode.IsUnmodified() {
+				fmt.Print("U")
+			} else {
+				fmt.Print(" ")
+			}
+			if fnode.IsNoDelete() {
+				fmt.Print("N")
+			} else {
+				fmt.Print(" ")
 			}
 
 			fmt.Printf(" ")
@@ -850,8 +882,9 @@ func (r *RMXImage) Mknod(dirFNode *FNode, fileName string, ftype int) (*FNode, e
 		Name:  fileName,
 		Image: r,
 		FType: uint8(ftype),
-		Flags: Allocated,
+		Flags: Allocated | Primary,
 		Gran:  1,
+		Owner: uint16(dirFNode.Number),
 	}
 
 	fnode.AddAccessor(AccessAll, 0)     // Root
