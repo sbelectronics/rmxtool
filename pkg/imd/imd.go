@@ -1,5 +1,19 @@
 package imd
 
+/* Imd: ImageDisk reader/writer
+ *
+ * Scott Baker, https://www.smbaker.com/
+ *
+ * This code is strongly inspired by imagedisk.py, which I found on Eric Smith's
+ * GitHub repository at https://github.com/brouhaha/fluxtoimd.
+ *
+ * This is a complete but likely imperfect rewrite in Go.
+ *
+ * I'm probably making some assumptions that are not valid in all images. For
+ * example, I assume there are no missing sectors on a track. I also don't pay
+ * any special attention to deleted sectors or "bad" sectors.
+ */
+
 import (
 	"fmt"
 	"os"
@@ -114,6 +128,10 @@ func (imd *ImageDisk) Load(fileName string) error {
 			data = data[1:]
 
 			//fmt.Printf("Sector %d: DataType=%d\n", track.SectorNumbers[i], dataType)
+
+			// I am suspicious about this dataType logic. I followed the same rules that Eric did in his
+			// code, yet it seems to be this should be doable as simple bitwise checks.
+			// TODO: Find a specification for IMD and get to the bottom of it.
 
 			if dataType > 0x08 {
 				return fmt.Errorf("invalid data type: %d", dataType)
