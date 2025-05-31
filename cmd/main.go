@@ -89,6 +89,13 @@ func FatalErrCheck(err error) {
 	}
 }
 
+func Infof(format string, args ...interface{}) {
+	if quiet {
+		return
+	}
+	fmt.Printf(format, args...)
+}
+
 func Dump(cmd *cobra.Command, args []string) {
 	r := rmximage.NewRMXImage()
 	err := r.Load(imageFileName, byteSwap)
@@ -230,9 +237,7 @@ func Get(cmd *cobra.Command, args []string) {
 			os.Exit(-1)
 		}
 
-		if !quiet {
-			fmt.Printf("Wrote %d bytes to %s\n", len(data), outputFileName)
-		}
+		Infof("Wrote %d bytes to %s\n", len(data), outputFileName)
 	}
 }
 
@@ -291,9 +296,7 @@ func Put(cmd *cobra.Command, args []string) {
 		fnode, err = r.PutFile(dirFNode, fileName, data)
 		FatalErrCheck(err)
 
-		if !quiet {
-			fmt.Printf("Stored %d bytes to FNode %d (%s)\n", len(data), fnode.Number, fnode.Name)
-		}
+		Infof("Stored %d bytes to FNode %d (%s)\n", len(data), fnode.Number, fnode.Name)
 	}
 
 	err = r.Save()
@@ -392,9 +395,7 @@ func CheckDisk(cmd *cobra.Command, args []string) {
 		fmt.Printf("Disk check completed with %d errors.\n", checkErrors)
 		os.Exit(1)
 	} else {
-		if !quiet {
-			fmt.Println("Disk check completed successfully, no errors found.")
-		}
+		Infof("Disk check completed successfully, no errors found.\n")
 	}
 }
 

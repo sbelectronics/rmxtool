@@ -28,7 +28,7 @@ func (c *Checker) CheckDisk1() {
 		return
 	}
 
-	fmt.Printf("Volume JName: %s\n", vl.Name)
+	Infof("Volume Name: %s\n", vl.Name)
 	c.CheckFNode(0, "FNodeList")
 	c.CheckFNode(3, "Unused FNode")
 	c.CheckFNode(int(vl.RootFnode), "RootDirectory")
@@ -40,7 +40,7 @@ func (c *Checker) CheckDisk1() {
 		return
 	}
 
-	fmt.Printf("Reconciling free lists\n")
+	Infof("Reconciling free lists\n")
 	for blocknum, fnodes := range c.Alloc {
 		if len(fnodes) > 1 {
 			fmt.Printf("Block %d is allocated by multiple FNodes:\n", blocknum)
@@ -115,7 +115,7 @@ func (c *Checker) MarkBlocks(fnode *rmximage.FNode) {
 }
 
 func (c *Checker) CheckFNode(fnodeNumber int, name string) {
-	fmt.Printf("  Checking fnode %s (#%d)\n", name, fnodeNumber)
+	Infof("  Checking fnode %s (#%d)\n", name, fnodeNumber)
 	fnode, err := c.r.GetFNode(fnodeNumber)
 	if err != nil {
 		fmt.Printf("  Error getting FNode %d: %v\n", fnodeNumber, err)
@@ -134,7 +134,7 @@ func (c *Checker) CheckFNode(fnodeNumber int, name string) {
 	}
 	c.MarkBlocks(fnode)
 	if fnode.IsDirectory() {
-		fmt.Printf("Checking directory %s\n", name)
+		Infof("Checking directory %s\n", name)
 		c.CheckDir(fnode)
 	}
 }
