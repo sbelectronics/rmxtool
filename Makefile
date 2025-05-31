@@ -19,6 +19,12 @@ reset: build
 test:
 	go test ./...
 
+.PHONY: release
+release:
+	GOOS=linux GOARCH=amd64 go build -o release/linux/amd64/rmxtool ./cmd
+	GOOS=linux GOARCH=arm64 go build -o release/linux/arm64/rmxtool ./cmd
+	GOOS=windows GOARCH=amd64 go build -o release/windows/amd64/rmxtool.exe ./cmd
+
 .PHONT: clean
 clean:
 	rm -f $(TOOL)

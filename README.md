@@ -3,6 +3,16 @@
 
 This is a tool for manipulating disk images for the iRMX-86 operating system.
 
+## Prebuilt Binaries
+
+Prebuilt binaries are in the release directory:
+
+* Windows: release/windows/amd64/rmxtool.exe
+
+* Linux, x86: release/linux/amd64/rmxtool
+
+* Linux, ARM: release/linux/arm64/rmxtool
+
 ## Short Demo
 
 This demo starts with a file, `test.img`, that is a raw image from disk 147023, which is
