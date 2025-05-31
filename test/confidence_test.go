@@ -12,9 +12,11 @@ import (
 )
 
 const (
-	RMXTOOL   = "../build/_output/rmxtool"
-	SRCIMAGE  = "../test.save"
-	TESTIMAGE = "../test.work"
+	RMXTOOL       = "../build/_output/rmxtool"
+	SRCIMAGE      = "../test.save"
+	TESTIMAGE     = "../test.work"
+	SRCIMAGE_IMD  = "../imdtest.save"
+	TESTIMAGE_IMD = "../imdtest-work.imd"
 )
 
 var (
@@ -56,6 +58,19 @@ func (s *ConfidenceSuite) SetupTest() {
 
 	err = os.WriteFile(TESTIMAGE, input, 0644)
 	s.Require().NoError(err, "Failed to write TESTIMAGE")
+
+	// do the same for IMD
+
+	err = os.Remove(TESTIMAGE_IMD)
+	if err != nil && !os.IsNotExist(err) {
+		s.FailNow("Failed to remove TESTIMAGE_IMD", err)
+	}
+
+	input, err = os.ReadFile(SRCIMAGE_IMD)
+	s.Require().NoError(err, "Failed to read SRCIMAGE_IMD")
+
+	err = os.WriteFile(TESTIMAGE_IMD, input, 0644)
+	s.Require().NoError(err, "Failed to write TESTIMAGE_IMD")
 }
 
 func (s *ConfidenceSuite) run(args ...string) (string, string, error) {
@@ -67,7 +82,7 @@ func (s *ConfidenceSuite) run(args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
-func (s *ConfidenceSuite) VerifyFiles(files map[string]string) {
+func (s *ConfidenceSuite) VerifyFiles(imgName string, files map[string]string) {
 	tempDir, err := os.MkdirTemp("", "confidence-test")
 	s.Require().NoError(err)
 	defer func() {
@@ -79,7 +94,7 @@ func (s *ConfidenceSuite) VerifyFiles(files map[string]string) {
 		baseName := path.Base(fileName)
 		destName := path.Join(tempDir, baseName)
 
-		out, errOut, err := s.run("get", "-q", fileName, "-f", TESTIMAGE, "-o", destName)
+		out, errOut, err := s.run("get", "-q", fileName, "-f", imgName, "-o", destName)
 
 		if expectedHash == "" {
 			s.Error(err, "Expected error for file: %s", fileName)
@@ -119,11 +134,11 @@ func (s *ConfidenceSuite) CheckDisk() {
 }
 
 func (s *ConfidenceSuite) TestGet() {
-	s.VerifyFiles(SRCIMAGE_FILES)
+	s.VerifyFiles(TESTIMAGE, SRCIMAGE_FILES)
 }
 
 func (s *ConfidenceSuite) TestDelete() {
-	s.VerifyFiles(SRCIMAGE_FILES)
+	s.VerifyFiles(TESTIMAGE, SRCIMAGE_FILES)
 
 	files := make(map[string]string)
 	for k, v := range SRCIMAGE_FILES {
@@ -135,14 +150,14 @@ func (s *ConfidenceSuite) TestDelete() {
 	s.ShowIfError(err, out, errOut)
 
 	files["/system/diskverify"] = ""
-	s.VerifyFiles(files)
+	s.VerifyFiles(TESTIMAGE, files)
 
 	out, errOut, err = s.run("delete", "-q", "/config/user/world", "-f", TESTIMAGE)
 	s.NoError(err)
 	s.ShowIfError(err, out, errOut)
 
 	files["/config/user/world"] = ""
-	s.VerifyFiles(files)
+	s.VerifyFiles(TESTIMAGE, files)
 	s.CheckDisk()
 }
 
@@ -158,7 +173,7 @@ func (s *ConfidenceSuite) TestPut() {
 	s.NoError(err)
 	s.ShowIfError(err, out, errOut)
 
-	s.VerifyFiles(files)
+	s.VerifyFiles(TESTIMAGE, files)
 	s.CheckDisk()
 }
 
@@ -195,7 +210,7 @@ func (s *ConfidenceSuite) TestDeletePut() {
 	s.NoError(err)
 	s.ShowIfError(err, out, errOut)
 
-	s.VerifyFiles(files)
+	s.VerifyFiles(TESTIMAGE, files)
 	s.CheckDisk()
 }
 
@@ -247,7 +262,60 @@ func (s *ConfidenceSuite) TestWipeAndFill() {
 	s.NoError(err)
 	s.ShowIfError(err, out, errOut)
 
-	s.VerifyFiles(files)
+	s.VerifyFiles(TESTIMAGE, files)
+
+	s.CheckDisk()
+}
+
+func (s *ConfidenceSuite) TestWipeAndFillIMD() {
+	out, errOut, err := s.run("wipe", "-f", TESTIMAGE_IMD)
+	s.NoError(err, "Wipe command failed")
+	s.ShowIfError(err, out, errOut)
+
+	// Verify that the image is empty
+	files := make(map[string]string)
+	for k := range SRCIMAGE_FILES {
+		files[k] = ""
+	}
+
+	files["country.txt"] = "1219be1aa7e85838ad7e5940ca078e1259cedf23"
+	files["/system/lamb.txt"] = "6002f8f827625b854c2764e3baa3611bdc7728ab"
+	files["/user/world/odyssey.txt"] = "230f4a98d3566dec50b3eb0e750df902cc652169"
+	files["/lang/scott.txt"] = "aa630cac89431f84f6d20c12c837311e5e44bfd6"
+
+	out, errOut, err = s.run("mkdir", "-q", "system", "-f", TESTIMAGE_IMD)
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("mkdir", "-q", "user", "-f", TESTIMAGE_IMD)
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("mkdir", "-q", "user/world", "-f", TESTIMAGE_IMD)
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("mkdir", "-q", "lang", "-f", TESTIMAGE_IMD)
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("put", "-q", "testdata/country.txt", "-f", TESTIMAGE_IMD)
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("put", "-q", "testdata/lamb.txt", "-f", TESTIMAGE_IMD, "-d", "/system")
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("put", "-q", "testdata/odyssey.txt", "-f", TESTIMAGE_IMD, "-d", "/user/world")
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	out, errOut, err = s.run("put", "-q", "testdata/scott.txt", "-f", TESTIMAGE_IMD, "-d", "/lang")
+	s.NoError(err)
+	s.ShowIfError(err, out, errOut)
+
+	s.VerifyFiles(TESTIMAGE_IMD, files)
 
 	s.CheckDisk()
 }
