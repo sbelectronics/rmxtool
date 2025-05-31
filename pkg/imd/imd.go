@@ -92,8 +92,8 @@ func (imd *ImageDisk) Load(fileName string) error {
 		imd.SetTrack(track)
 		data = data[5:]
 
-		fmt.Printf("Loading track: Mode=%d, Cylinder=%d, Head=%d, SectorCount=%d, SectorSizeCode=%d\n",
-			track.Mode, track.Cylinder, track.Head, track.SectorCount, track.SectorSizeCode)
+		//fmt.Printf("Loading track: Mode=%d, Cylinder=%d, Head=%d, SectorCount=%d, SectorSizeCode=%d\n",
+		//	track.Mode, track.Cylinder, track.Head, track.SectorCount, track.SectorSizeCode)
 
 		if track.SectorSizeCode == 0xFF {
 			for i := 0; i < int(track.SectorCount); i++ {
@@ -113,7 +113,7 @@ func (imd *ImageDisk) Load(fileName string) error {
 			dataType := data[0]
 			data = data[1:]
 
-			fmt.Printf("Sector %d: DataType=%d\n", track.SectorNumbers[i], dataType)
+			//fmt.Printf("Sector %d: DataType=%d\n", track.SectorNumbers[i], dataType)
 
 			if dataType > 0x08 {
 				return fmt.Errorf("invalid data type: %d", dataType)
@@ -123,8 +123,8 @@ func (imd *ImageDisk) Load(fileName string) error {
 			compressed := (dataType == 0x02 || dataType == 0x04 || dataType == 0x06 || dataType == 0x08)
 			secSize := 128 << track.SectorSizeCodes[i]
 
-			fmt.Printf("SecSize=%d, Deleted=%t, Bad=%t, Compressed=%t\n",
-				secSize, deleted, bad, compressed)
+			//fmt.Printf("SecSize=%d, Deleted=%t, Bad=%t, Compressed=%t\n",
+			//	secSize, deleted, bad, compressed)
 
 			var secData []byte
 			if compressed {
@@ -160,7 +160,7 @@ func (imd *ImageDisk) GetIMD() ([]byte, error) {
 	//data = append(data, 0x1A)
 	for i := 0; i < imd.CylCount; i++ {
 		for j := 0; j < imd.HeadCount; j++ {
-			fmt.Printf("Writing track: Cylinder=%d, Head=%d\n", i, j)
+			//fmt.Printf("Writing track: Cylinder=%d, Head=%d\n", i, j)
 			track := imd.Tracks[i][j]
 			data = append(data, track.Mode)
 			data = append(data, track.Cylinder)
@@ -205,8 +205,8 @@ func (imd *ImageDisk) GetIMD() ([]byte, error) {
 
 				data = append(data, uint8(dataType))
 
-				fmt.Printf("  %d: SectorNumber=%d, SizeCode=%d, DataType=%d, compress=%v len=%d\n",
-					k, track.SectorNumbers[k], track.SectorSizeCodes[k], dataType, compress, len(sector.Data))
+				//fmt.Printf("  %d: SectorNumber=%d, SizeCode=%d, DataType=%d, compress=%v len=%d\n",
+				//	k, track.SectorNumbers[k], track.SectorSizeCodes[k], dataType, compress, len(sector.Data))
 
 				if compress {
 					data = append(data, sector.Data[0]) // Compressed data is just the first byte repeated
