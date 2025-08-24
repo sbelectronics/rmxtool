@@ -30,6 +30,9 @@ const (
 	AccessAppend = 4
 	AccessUpdate = 8
 	AccessAll    = (AccessDelete | AccessRead | AccessAppend | AccessUpdate)
+
+	/* number of pointers in fnode */
+	NumPointers = 8
 )
 
 type RMXImage struct {
@@ -157,6 +160,8 @@ type RmxVolumeLabel struct {
 	FnodeStart uint32
 	FnodeSize  uint16
 	RootFnode  uint16
+
+	Image *RMXImage // reference to the RMXImage this FNode belongs to, set by GetFNode()
 }
 
 func (v *RmxVolumeLabel) Deserialize(data []byte) {
@@ -195,6 +200,13 @@ func (v *RmxVolumeLabel) Print() {
 	fmt.Printf("Root Fnode: %d\n", v.RootFnode)
 }
 
+func (v *RmxVolumeLabel) Update() error {
+	if v.Image == nil {
+		return fmt.Errorf("Volume Label does not have an associated RMXImage")
+	}
+	return v.Image.PutVolumeLabel(v)
+}
+
 type Pointer struct {
 	NumBlocks    uint16
 	BlockPointer uint32 /* actually uint24 */
@@ -210,7 +222,7 @@ type FNode struct {
 	ModifyTime  uint32
 	TotalSize   uint32
 	TotalBlocks uint32
-	Pointers    [8]Pointer
+	Pointers    [NumPointers]Pointer
 	ThisSize    uint32
 	ReservedA   uint16
 	ReservedB   uint16
@@ -238,7 +250,7 @@ func (f *FNode) Deserialize(data []byte) {
 	f.ModifyTime = binary.LittleEndian.Uint32(data[14:18])
 	f.TotalSize = binary.LittleEndian.Uint32(data[18:22])
 	f.TotalBlocks = binary.LittleEndian.Uint32(data[22:26])
-	for i := 0; i < 8; i++ {
+	for i := 0; i < NumPointers; i++ {
 		f.Pointers[i].NumBlocks = binary.LittleEndian.Uint16(data[26+i*5 : 28+i*5])
 		f.Pointers[i].BlockPointer = uint32(data[28+i*5]) + uint32(data[29+i*5])<<8 + uint32(data[30+i*5])<<16
 	}
@@ -263,7 +275,7 @@ func (f *FNode) Serialize(data []byte) {
 	binary.LittleEndian.PutUint32(data[14:18], f.ModifyTime)
 	binary.LittleEndian.PutUint32(data[18:22], f.TotalSize)
 	binary.LittleEndian.PutUint32(data[22:26], f.TotalBlocks)
-	for i := 0; i < 8; i++ {
+	for i := 0; i < NumPointers; i++ {
 		binary.LittleEndian.PutUint16(data[26+i*5:28+i*5], f.Pointers[i].NumBlocks)
 		data[28+i*5] = byte(f.Pointers[i].BlockPointer)
 		data[29+i*5] = byte(f.Pointers[i].BlockPointer >> 8)
@@ -392,7 +404,7 @@ func (f *FNode) UpdateDataInPlace(data []byte) error {
 }
 
 func (f *FNode) GetFreePointer() (int, error) {
-	for i := 0; i < 8; i++ {
+	for i := 0; i < NumPointers; i++ {
 		if f.Pointers[i].NumBlocks == 0 {
 			return i, nil
 		}
@@ -665,6 +677,32 @@ func (v *Bitmap) NextFree() (int, error) {
 	return 0, fmt.Errorf("no free bits")
 }
 
+func (v *Bitmap) GetFreeRange(count int, contig bool) ([]int, error) {
+	if count <= 0 {
+		return nil, fmt.Errorf("count must be greater than 0")
+	}
+
+	blocks := []int{}
+
+	for i := 0; i < v.numBits; i++ {
+		if !v.IsAlloc(i) {
+			blocks = append(blocks, i)
+			if len(blocks) == count {
+				return blocks, nil
+			}
+		} else {
+			if contig {
+				blocks = []int{} // reset if we hit an allocated block
+			}
+		}
+	}
+	if contig {
+		return nil, fmt.Errorf("no contiguous free ranges for size %d", count)
+	} else {
+		return nil, fmt.Errorf("not enough free bits for size %d", count)
+	}
+}
+
 func (v *Bitmap) Print() {
 	start := -1
 	for i := 0; i < v.numBits; i++ {
@@ -713,10 +751,12 @@ func (r *RMXImage) Load(fileName string, byteSwap bool) error {
 		}
 		data = im.GetData()
 
-		err = os.WriteFile("imdtest.img", data, 0644)
-		if err != nil {
-			return err
-		}
+		/*
+			err = os.WriteFile("imdtest.img", data, 0644)
+			if err != nil {
+				return err
+			}
+		*/
 		r.im = im
 	} else {
 		var err error
@@ -787,7 +827,16 @@ func (r *RMXImage) GetVolumeLabel() (*RmxVolumeLabel, error) {
 	}
 	label := &RmxVolumeLabel{}
 	label.Deserialize(r.contents[384:])
+	label.Image = r
 	return label, nil
+}
+
+func (r *RMXImage) PutVolumeLabel(label *RmxVolumeLabel) error {
+	if len(r.contents) < 512 {
+		return os.ErrInvalid
+	}
+	label.Serialize(r.contents[384:])
+	return nil
 }
 
 func (r *RMXImage) GetFNode(fnodeIndex int) (*FNode, error) {
@@ -942,34 +991,48 @@ func (r *RMXImage) Mknod(dirFNode *FNode, fileName string, ftype int) (*FNode, e
 	return fnode, nil
 }
 
-func (r *RMXImage) PutFile(dirFNode *FNode, fileName string, data []byte) (*FNode, error) {
-	vl, err := r.GetVolumeLabel()
-	if err != nil {
-		return nil, err
-	}
-
+func (r *RMXImage) PutFile(dirFNode *FNode, fileName string, data []byte, contig bool) (*FNode, error) {
 	fnode, err := r.Mknod(dirFNode, fileName, TypeData)
 	if err != nil {
 		return nil, err
 	}
 
-	fnode.TotalSize = uint32(len(data))
-
-	// Note that Mknod might affect volmap, so do this after
-	volMap, err := r.GetVolMap()
+	err = r.PutData(fnode, data, contig)
 	if err != nil {
 		return nil, err
 	}
 
+	return fnode, nil
+}
+
+func (r *RMXImage) PutData(fnode *FNode, data []byte, contig bool) error {
+	vl, err := r.GetVolumeLabel()
+	if err != nil {
+		return err
+	}
+
+	fnode.TotalSize = uint32(len(data))
+
+	// Note that Mknod might affect volmap, so do this after calling mknod
+	volMap, err := r.GetVolMap()
+	if err != nil {
+		return err
+	}
+
+	blockCount := (len(data) + int(vl.Gran) - 1) / int(vl.Gran)
+	fmt.Printf("Allocating %d blocks for file '%s' gran=%d\n", blockCount, fnode.Name, vl.Gran)
+	blockNums, err := volMap.GetFreeRange(blockCount, contig)
+	if err != nil {
+		return err
+	}
+
 	blkList := []Pointer{}
 
+	blockIndex := 0
 	start := -1
 	last := -1
 	for len(data) > 0 {
-		blkNum, err := volMap.NextFree()
-		if err != nil {
-			return nil, err
-		}
+		blkNum := blockNums[blockIndex]
 		//fmt.Printf("Allocating block %d for file '%s'\n", blkNum, fileName)
 		if blkNum != last+1 {
 			if start != -1 {
@@ -990,6 +1053,8 @@ func (r *RMXImage) PutFile(dirFNode *FNode, fileName string, data []byte) (*FNod
 
 		fnode.TotalBlocks += 1
 		fnode.ThisSize += uint32(vl.Gran)
+
+		blockIndex += 1
 	}
 
 	if start != -1 {
@@ -997,23 +1062,22 @@ func (r *RMXImage) PutFile(dirFNode *FNode, fileName string, data []byte) (*FNod
 	}
 
 	if len(blkList) > 8 {
-		return nil, fmt.Errorf("too many blocks allocated for FNode: %d. Long files not supported yet", len(blkList))
+		return fmt.Errorf("too many blocks allocated for FNode: %d. Long files not supported yet", len(blkList))
 	}
 
 	err = volMap.Update()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	numBlocks := (len(data) + int(vl.Gran) - 1) / int(vl.Gran)
-	fnode.TotalBlocks = uint32(numBlocks)
+	fmt.Printf("XXX %d", fnode.TotalBlocks)
 	copy(fnode.Pointers[:], blkList)
 	err = fnode.Update()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return fnode, nil
+	return nil
 }
 
 func (r *RMXImage) Mkdir(parentFNode *FNode, dirName string) (*FNode, error) {
@@ -1149,7 +1213,7 @@ func (r *RMXImage) Lookup(dir *FNode, name string) (*FNode, error) {
 }
 
 func (r *RMXImage) DeleteFNode(fnode *FNode) error {
-	volMap, err := r.GetVolMap()
+	err := r.TruncateFNode(fnode)
 	if err != nil {
 		return err
 	}
@@ -1157,19 +1221,6 @@ func (r *RMXImage) DeleteFNode(fnode *FNode) error {
 	fnodeMap, err := r.GetFNodeMap()
 	if err != nil {
 		return err
-	}
-
-	_, err = r.ReadFile(fnode)
-	if err != nil {
-		return err
-	}
-
-	for _, blk := range fnode.AllDataBlocks {
-		volMap.SetAlloc(blk, false)
-	}
-
-	for _, blk := range fnode.AllIndirectBlocks {
-		volMap.SetAlloc(blk, false)
 	}
 
 	fnodeMap.SetAlloc(fnode.Number, false)
@@ -1190,12 +1241,47 @@ func (r *RMXImage) DeleteFNode(fnode *FNode) error {
 		return err
 	}
 
+	err = fnodeMap.Update()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *RMXImage) TruncateFNode(fnode *FNode) error {
+	volMap, err := r.GetVolMap()
+	if err != nil {
+		return err
+	}
+
+	_, err = r.ReadFile(fnode)
+	if err != nil {
+		return err
+	}
+
+	for _, blk := range fnode.AllDataBlocks {
+		volMap.SetAlloc(blk, false)
+	}
+
+	for _, blk := range fnode.AllIndirectBlocks {
+		volMap.SetAlloc(blk, false)
+	}
+
 	err = volMap.Update()
 	if err != nil {
 		return err
 	}
 
-	err = fnodeMap.Update()
+	for i := 0; i < NumPointers; i++ {
+		fnode.Pointers[i].NumBlocks = 0
+	}
+
+	fnode.TotalSize = 0
+	fnode.ThisSize = 0
+	fnode.TotalBlocks = 0
+
+	err = fnode.Update()
 	if err != nil {
 		return err
 	}

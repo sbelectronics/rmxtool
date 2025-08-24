@@ -6,12 +6,14 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"path"
+	"strconv"
 )
 
 var (
 	checkErrors    int
 	quiet          bool
 	byteSwap       bool
+	contig         bool
 	imageFileName  string
 	outputFileName string
 	rmxDirectory   string
@@ -79,6 +81,18 @@ var (
 		Use:   "free",
 		Short: "Print free blocks",
 		Run:   Free,
+	}
+
+	getTreeCmd = &cobra.Command{
+		Use:   "gettree",
+		Short: "Get the entire disk tree",
+		Run:   GetTree,
+	}
+
+	incFnodeCmd = &cobra.Command{
+		Use:   "incfnode",
+		Short: "Increase the number of FNodes in the image",
+		Run:   IncFnode,
 	}
 )
 
@@ -296,7 +310,7 @@ func Put(cmd *cobra.Command, args []string) {
 			FatalErrCheck(err)
 		}
 
-		fnode, err = r.PutFile(dirFNode, fileName, data)
+		fnode, err = r.PutFile(dirFNode, fileName, data, contig)
 		FatalErrCheck(err)
 
 		Infof("Stored %d bytes to FNode %d (%s)\n", len(data), fnode.Number, fnode.Name)
@@ -429,6 +443,150 @@ func Free(cmd *cobra.Command, args []string) {
 	fmt.Printf("Free FNodes: %d\n", freeFNodes)
 }
 
+func GetTree(cmd *cobra.Command, args []string) {
+	r := rmximage.NewRMXImage()
+	err := r.Load(imageFileName, byteSwap)
+	FatalErrCheck(err)
+
+	vl, err := r.GetVolumeLabel()
+	FatalErrCheck(err)
+
+	err = GetDirFNode(r, int(vl.RootFnode), "")
+	FatalErrCheck(err)
+}
+
+func GetDirFNode(r *rmximage.RMXImage, fnodeNumber int, pathName string) error {
+	fnode, err := r.GetFNode(fnodeNumber)
+	if err != nil {
+		return fmt.Errorf("  Error getting FNode %d: %v\n", fnodeNumber, err)
+	}
+	if !fnode.IsAllocated() {
+		return fmt.Errorf("  Error: FNode %d is not allocated.\n", fnodeNumber)
+	}
+	data, err := r.ReadFile(fnode)
+	if err != nil {
+		return fmt.Errorf("  Error reading file for FNode %d: %v\n", fnodeNumber, err)
+	}
+	if fnode.IsDirectory() {
+		dirList, err := r.GetDirectory(fnode)
+		if err != nil {
+			return fmt.Errorf("Error getting directory: %v\n", err)
+		}
+		fmt.Printf("Processing dir %s\n", pathName)
+		for _, entry := range dirList.Entries {
+			var newPathName string
+			if pathName == "" {
+				newPathName = entry.Name
+			} else {
+				newPathName = path.Join(pathName, entry.Name)
+			}
+			if entry.FNode != 0 {
+				GetDirFNode(r, int(entry.FNode), newPathName)
+			}
+		}
+	} else if fnode.FType != rmximage.TypeData {
+		if !quiet {
+			fmt.Printf("Skipping file %s\n", pathName)
+		}
+	} else {
+		if !quiet {
+			fmt.Printf("Processing file %s\n", pathName)
+		}
+		dir := path.Dir(pathName)
+		if dir != "" && dir != "." {
+			err := os.MkdirAll(dir, 0755)
+			if err != nil {
+				return fmt.Errorf("Error creating directory %s: %v", dir, err)
+			}
+		}
+		f, err := os.OpenFile(pathName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if err != nil {
+			return fmt.Errorf("Error opening output file %s: %v", outputFileName, err)
+		}
+		defer func() {
+			err := f.Close()
+			FatalErrCheck(err)
+		}()
+		_, err = f.Write(data)
+		FatalErrCheck(err)
+	}
+
+	return nil
+}
+
+func IncFnode(cmd *cobra.Command, args []string) {
+	if len(args) != 1 {
+		fmt.Printf("Usage: %s <fnode count>\n", cmd.Use)
+		os.Exit(-1)
+	}
+	newFnodeCount, err := strconv.Atoi(args[0])
+	if err != nil {
+		fmt.Printf("Invalid fnode count: %s\n", args[0])
+		os.Exit(-1)
+	}
+
+	r := rmximage.NewRMXImage()
+	err = r.Load(imageFileName, byteSwap)
+	FatalErrCheck(err)
+
+	vl, err := r.GetVolumeLabel()
+	FatalErrCheck(err)
+
+	if newFnodeCount <= int(vl.MaxFnode) {
+		fmt.Printf("FNode count must be greater than current max FNode count (%d)\n", vl.MaxFnode)
+		os.Exit(-1)
+	}
+
+	fnode, err := r.GetFNode(0)
+	FatalErrCheck(err)
+
+	data, err := r.ReadFile(fnode)
+	FatalErrCheck(err)
+
+	err = r.TruncateFNode(fnode)
+	FatalErrCheck(err)
+
+	newSize := uint32(newFnodeCount) * uint32(vl.FnodeSize)
+	padding := make([]byte, newSize-uint32(len(data)))
+	data = append(data, padding...)
+
+	err = r.PutData(fnode, data, true) // side-effect will write fnode to old location
+	FatalErrCheck(err)
+
+	// update the volume label, do this before fnode.Update() so it writes to the
+	// correcy place.
+	origMaxFnode := vl.MaxFnode
+	vl.FnodeStart = uint32(fnode.Pointers[0].BlockPointer) * uint32(vl.Gran)
+	vl.MaxFnode = uint16(newFnodeCount)
+	err = vl.Update()
+	FatalErrCheck(err)
+
+	err = fnode.Update()
+	FatalErrCheck(err)
+
+	// make the fnode map bigger
+
+	fmfnode, err := r.GetFNode(2) // FNodeMap
+	FatalErrCheck(err)
+
+	fmfnode.TotalSize = uint32(newFnodeCount+7) / uint32(8)
+
+	err = fmfnode.Update()
+	FatalErrCheck(err)
+
+	fm, err := r.GetFNodeMap()
+	FatalErrCheck(err)
+	for i := origMaxFnode; i < uint16(newFnodeCount); i++ {
+		fm.SetAlloc(int(i), false)
+	}
+
+	err = fm.Update()
+	FatalErrCheck(err)
+
+	err = r.Save()
+	FatalErrCheck(err)
+}
+
 func main() {
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Hide nonessential output")
 	rootCmd.PersistentFlags().BoolVarP(&byteSwap, "byteswap", "b", false, "Swap low and high bytes")
@@ -443,10 +601,13 @@ func main() {
 	rootCmd.AddCommand(wipeCmd)
 	rootCmd.AddCommand(chkdskCmd)
 	rootCmd.AddCommand(freeCmd)
+	rootCmd.AddCommand(getTreeCmd)
+	rootCmd.AddCommand(incFnodeCmd)
 
 	getCmd.PersistentFlags().StringVarP(&outputFileName, "output", "o", "", "output filename")
 	putCmd.PersistentFlags().StringVarP(&rmxDirectory, "directory", "d", "", "parent directory to use in RMX image")
 	putCmd.PersistentFlags().StringVarP(&destName, "name", "n", "", "name to use when putting file in RMX image (defaults to basename of file)")
+	putCmd.PersistentFlags().BoolVarP(&contig, "contig", "c", false, "Allocate contiguous blocks for the file in the RMX image")
 
 	err := rootCmd.Execute()
 	FatalErrCheck(err)

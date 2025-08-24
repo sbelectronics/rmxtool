@@ -50,7 +50,7 @@ func (c *Checker) CheckDisk1() {
 			checkErrors += 1
 		}
 		if !volMap.IsAlloc(blocknum) {
-			fmt.Printf("  Block %d is marked as free, but allocated by FNodes:\n", blocknum)
+			fmt.Printf("  Block %d is marked as free, but allocated by FNodes %d\n", blocknum, fnodes[0].Number)
 			checkErrors += 1
 		}
 	}
